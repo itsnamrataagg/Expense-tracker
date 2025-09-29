@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Expense Tracker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Expense Tracker Users</h1>
+    <h2 id="welcome" class="text-success"></h2>
+    <button class="btn btn-secondary mb-3" onclick="logout()">Logout</button>
+
+    <!-- Admin Panel Link -->
+    <!-- <div class="mb-3">
+        <a href="admin.html" class="btn btn-info">Go to Admin Panel</a>
+    </div> -->
+
+    <!-- Add/Edit User Form -->
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <input type="text" id="name" class="form-control" placeholder="Name">
+        </div>
+        <div class="col-md-3">
+            <input type="email" id="email" class="form-control" placeholder="Email">
+        </div>
+        <div class="col-md-3">
+            <input type="number" id="userBalance" class="form-control" placeholder="Balance">
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-primary w-100" onclick="addOrUpdateUser()">Add User</button>
+        </div>
+    </div>
+
+    <!-- Add Expense Form -->
+    <!-- <div class="row mb-3">
+        <div class="col-md-4">
+            <input type="text" id="expenseTitle" class="form-control" placeholder="Expense Title">
+        </div>
+        <div class="col-md-4">
+            <input type="number" id="expenseAmount" class="form-control" placeholder="Amount">
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-success w-100" onclick="addExpense()">Add Expense</button>
+        </div>
+    </div>  -->
+
+    <!-- Total Balance -->
+    <h5>Total Balance: ₹<span id="totalBalance">0.00</span></h5>
+
+    <!-- Users Table -->
+    <table class="table table-striped mt-3">
+        <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Balance</th>
+            <th>Action</th>
+        </tr>
+        </thead>
+        <tbody id="userTable"></tbody>
+    </table>
+
+    <!-- Expenses Table -->
+    <!-- <h2>All Expenses</h2>
+    <pre id="expenseTable"></pre> -->
+</div>
+
+<script>
+const loggedInUser = JSON.parse(localStorage.getItem('loggedInUser'));
+if(!loggedInUser) {
+    alert("Please login first!");
+    window.location.href = 'login.html';
+} else {
+    document.getElementById('welcome').innerText = `Welcome, ${loggedInUser.name}!`;
+}
+
+const apiUrl = '/api/users';
+let editUserId = null;
+
+// Load users and calculate total balance
+async function loadUsers() {
+    try {
+        const res = await fetch(apiUrl);
+        const users = await res.json();
+
+        const table = document.getElementById('userTable');
+        table.innerHTML = '';
+        let total = 0;
+
+        users.forEach(u => {
+            const userBalance = parseFloat(u.balance) || 0;
+            total += userBalance;
+
+            const row = `<tr>
+                <td>${u.id}</td>
+                <td>${u.name}</td>
+                <td>${u.email}</td>
+                <td>${userBalance.toFixed(2)}</td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editUser(${u.id}, '${u.name}', '${u.email}', ${userBalance})">Edit</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.id})">Delete</button>
+                </td>
+            </tr>`;
+            table.innerHTML += row;
+        });
+
+        document.getElementById('totalBalance').innerText = total.toFixed(2);
+    } catch(err) {
+        showAlert('Failed to load users', 'danger');
+        console.error(err);
+    }
+}
+
+// Add or update user
+async function addOrUpdateUser() {
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const balance = parseFloat(document.getElementById('userBalance').value);
+
+    if(!name || !email || isNaN(balance)) {
+        showAlert('Please fill all fields correctly', 'danger');
+        return;
+    }
+
+    if(editUserId) {
+        try {
+            const res = await fetch(`${apiUrl}/${editUserId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, email, balance})
+            });
+
+            if(res.ok) showAlert('User updated successfully!', 'success');
+            else showAlert(await res.text(), 'danger');
+
+            editUserId = null;
+            document.querySelector("button[onclick='addOrUpdateUser()']").innerText = "Add User";
+        } catch(err) {
+            showAlert('Failed to update user', 'danger');
+            console.error(err);
+        }
+    } else {
+        try {
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name, email, password:"1234", balance})
+            });
+
+            if(res.ok) showAlert('User added successfully!', 'success');
+            else showAlert(await res.text(), 'danger');
+        } catch(err) {
+            showAlert('Failed to add user', 'danger');
+            console.error(err);
+        }
+    }
+
+    document.getElementById('name').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('userBalance').value = '';
+    loadUsers();
+}
+
+// Edit user
+function editUser(id, name, email, balance) {
+    document.getElementById('name').value = name;
+    document.getElementById('email').value = email;
+    document.getElementById('userBalance').value = balance;
+    editUserId = id;
+    document.querySelector("button[onclick='addOrUpdateUser()']").innerText = "Update User";
+}
+
+// Delete user
+async function deleteUser(id) {
+    try {
+        const res = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+        if(res.ok) showAlert('User deleted successfully!', 'success');
+        else showAlert(await res.text(), 'danger');
+        loadUsers();
+    } catch(err) {
+        showAlert('Failed to delete user', 'danger');
+        console.error(err);
+    }
+}
+
+//Add new expense
+async function addExpense() {
+    const title = document.getElementById('expenseTitle').value.trim();
+    const amount = parseFloat(document.getElementById('expenseAmount').value);
+    const userId = loggedInUser.id;
+
+    if(!title || isNaN(amount)) {
+        showAlert("Please fill all expense fields correctly", "danger");
+        return;
+    }
+
+    try {
+        const res = await fetch('/expenses', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({title, amount, userId})
+        });
+
+        if(res.ok) showAlert("Expense added successfully!", "success");
+        else showAlert(await res.text(), "danger");
+    } catch(err) {
+        showAlert("Failed to add expense", "danger");
+        console.error(err);
+    }
+
+    document.getElementById('expenseTitle').value = '';
+    document.getElementById('expenseAmount').value = '';
+    loadExpenses();
+}
+
+// Load all expenses
+async function loadExpenses() {
+    try {
+        const res = await fetch('/expenses');
+        const expenses = await res.json();
+        document.getElementById('expenseTable').textContent = JSON.stringify(expenses, null, 2);
+    } catch(err) {
+        showAlert("Failed to load expenses", "danger");
+        console.error(err);
+    }
+}
+
+// Logout
+function logout() {
+    localStorage.removeItem("loggedInUser");
+    window.location.href = "login.html";
+}
+
+// Show alert
+function showAlert(msg, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} mt-2`;
+    alertDiv.innerText = msg;
+    document.querySelector('.container').prepend(alertDiv);
+    setTimeout(() => alertDiv.remove(), 3000);
+}
+
+// Initial load
+loadUsers();
+loadExpenses();
+</script>
+</body>
+</html>
